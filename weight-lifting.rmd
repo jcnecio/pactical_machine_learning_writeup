@@ -1,0 +1,166 @@
+## Practical Machine Learning - Write Up
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+#### Model fitting/Algorithms used
+I used these types of model fitting until I get some desired results, some of them like the regression trees took a small amount of time but gave me results that will very likely to fail the test, the bagging took so much memory and it crashed my RStudio, random forest and boosting gave me results both but I like the result from random forest thats why That is what I'm going to show here.
+
++ Recursive Partitioning and Regression Trees
++ Bagging
++ Random Forest
++ Boosting with trees - gbm
+
+#### Getting the data
+```
+# This will load the csv into my 'data' variable
+data <- read.csv('pml-training.csv')
+# This will filter out the columns with pretty much NA
+data <- data[,colSums(is.na(data)) == 0]
+# This will remove the columns with "" because some columns has a majority of blanks
+data <- data[,colSums(data=="") == 0]
+```
+
+I also spotted in the data that some fields are not really needed for the tree like the name of the participant and timestamp, so I need to filter out only the fields with arm,belt,forearm,dumbbell and classe
+
+```
+data <- data[,grep("classe|arm|belt|forearm|dumbbell",colnames(data))]
+```
+
+After that I have these results 19622 obs. of 53 variables started from 160 variables with most of them not needed in this project.
+
+#### Partitioning the data
+Like in the videos in Practical Machine learning where they use 70% as training data and 30% as testing data, I will do the same
+
+```
+inTrain <- createDataPartition(y=data$classe, p=0.7,list=F)
+training <- data[inTrain,]
+testing <- data[-inTrain,]
+```
+
+- training 13737 samples with 53 variables
+- testing 5885 samples with 53 variables
+
+#### Training using caret and getting the Model
+So basically there is the 'train' method from caret to do the random forest for me and I can do the manual way, but the time to do these training stuff takes time so I'm going to use the one in caret.
+
+```
+modFit <- train(classe ~ .,method="rf",data=training)
+```
+*Warning this took some time to finish, if the machine hangs its non of my problem ok V^_^V
+
+#### Summary of the model gathered
+We then view the content of modFit to see what does the model looks like:
+```
+modFit
+
+Random Forest 
+
+13737 samples
+   52 predictor
+    5 classes: 'A', 'B', 'C', 'D', 'E' 
+
+No pre-processing
+Resampling: Bootstrapped (25 reps) 
+
+Summary of sample sizes: 13737, 13737, 13737, 13737, 13737, 13737, ... 
+
+Resampling results across tuning parameters:
+
+  mtry  Accuracy  Kappa  Accuracy SD  Kappa SD
+   2    0.988     0.985  0.00171      0.00216 
+  27    0.988     0.984  0.00162      0.00205 
+  52    0.977     0.971  0.00357      0.00452 
+
+Accuracy was used to select the optimal model using  the largest value.
+The final value used for the model was mtry = 2.
+```
+The random forest model had a result of 0.988 or 98.8% accuracy using the model at mtry = 2.
+
+#### Cross validation with the testing data
+We still have the 30% for our test data and we are going to use it to validate our model
+```
+# First we need to predict from our testing partition
+pred <- predict(modFit, newdata=testing)
+# Get the right predictions then store it into testing
+testing$predRight <- pred==testing$classe
+# We then show the confusion matrix to get a better view of the prediction result
+confusionMatrix(pred,testing$classe)
+ 
+Confusion Matrix and Statistics
+
+          Reference
+Prediction    A    B    C    D    E
+         A 1674   11    0    0    0
+         B    0 1128    8    0    0
+         C    0    0 1015   15    0
+         D    0    0    3  949    1
+         E    0    0    0    0 1081
+
+Overall Statistics
+                                          
+               Accuracy : 0.9935          
+                 95% CI : (0.9911, 0.9954)
+    No Information Rate : 0.2845          
+    P-Value [Acc > NIR] : < 2.2e-16       
+                                          
+                  Kappa : 0.9918          
+ Mcnemar's Test P-Value : NA              
+
+Statistics by Class:
+
+                     Class: A Class: B Class: C Class: D Class: E
+Sensitivity            1.0000   0.9903   0.9893   0.9844   0.9991
+Specificity            0.9974   0.9983   0.9969   0.9992   1.0000
+Pos Pred Value         0.9935   0.9930   0.9854   0.9958   1.0000
+Neg Pred Value         1.0000   0.9977   0.9977   0.9970   0.9998
+Prevalence             0.2845   0.1935   0.1743   0.1638   0.1839
+Detection Rate         0.2845   0.1917   0.1725   0.1613   0.1837
+Detection Prevalence   0.2863   0.1930   0.1750   0.1619   0.1837
+Balanced Accuracy      0.9987   0.9943   0.9931   0.9918   0.9995
+```
+We can then count the number of correct prediction against the number of wrong predictions
+```
+# Sum the right predictions to get the total of correct predictions
+correctPredictions <- sum(testing$predRight)
+# Sum the wrong predictions to get the total of incorrect predictions
+wrongPredictions <- sum(!testing$predRight)
+# Get the percentage of accuracy
+accuracy <- (correctPredictions-wrongPredictions)/correctPredictions
+```
+We then got the accuracy also the same as in the confusion matrix
+
+#### Predicting the required results from the actual testing data(pml-testing.csv)
+We need to clean the data set first in order to do our prediction
+```
+# Getting the data
+aTesting <- read.csv('pml-testing.csv')
+aTesting <- aTesting[,colSums(is.na(aTesting)) == 0]
+aTesting <- aTesting[,colSums(aTesting=="") == 0]
+aTesting <- aTesting[,grep("classe|arm|belt|forearm|dumbbell",colnames(aTesting))]
+```
+
+Then we do the same from the above testing part
+
+```
+# Predicting from the random forest model
+aPred <- predict(modFit, newdata=aTesting)
+# Then we now have the prediction for the testing data set
+aPred
+[1] B A B A A E D B A A B C B A E E A B B B
+Levels: A B C D E
+```
+Then we submit it using the assignment submission function
+```
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(aPred)
+```
+#### Conclusion
+Random forest maybe is not the best algorithm to be used in the assignment, but it provides great accuracy.
